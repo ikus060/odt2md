@@ -1,0 +1,98 @@
+#!/bin/bash
+# Script used to convert odt file to markdown file.
+
+#shopt -o -s xtrace
+
+# Increase header level +1
+# Remove first heder. Set is as metadata.
+read -r -d '' HEADERS <<'EOF'
+from pandocfilters import toJSONFilter
+
+def headers(key, value, format, meta):
+  if key == 'Header' and value[0]==1:
+      return []
+
+if __name__ == "__main__":
+  toJSONFilter(headers)
+EOF
+
+# Extract embeded images
+read -r -d '' IMAGES <<'EOF'
+import sys
+import base64
+from StringIO import StringIO
+from pandocfilters import toJSONFilter, Image
+
+count=1
+basename=sys.argv[1]
+
+def images(key, value, format, meta):
+  global count
+  global basename
+  if key == 'Image' and value[1][0].startswith('data:'):
+    src = value[1][0]
+    start = src.find(',')
+    ext = src[src.find('/')+1:src.find(';')]
+    filename = '%s-%s.%s' % (basename, count, ext)
+    with open(filename, 'w') as f:
+      base64.decode(StringIO(src[start:]), f)
+    value[1][0] = filename
+    # Increase image count
+    count=count+1
+    return Image(value[0],value[1])
+
+if __name__ == "__main__":
+  toJSONFilter(images)
+EOF
+
+# Validate arguments
+if [ "$#" -ne 1 ]; then
+    # Open a dialog?!
+    echo "Illegal number of parameters"
+    exit 1
+fi
+
+# Convert file to HTML
+TFILE="/tmp/$(basename $0).$$.html"
+odt2html --output="$TFILE" --format=html "$1"
+
+# Fix <li> issues - remove <p> from <li>
+sed -i.bak 's#<li/>##g' "$TFILE"
+lead='^<ul>$'
+tail='^<\/ul>$'
+sed -i.bak "/$lead/,/$tail/{s/<p/<li/g}" "$TFILE"
+sed -i.bak "/$lead/,/$tail/{s/<\/p>/<\/li>/g}" "$TFILE"
+
+# Fix <table> issues - remove <p> from <li>
+lead='^<table'
+tail='^<\/table>$'
+sed -i.bak "/$lead/,/$tail/{s/<p[^>]*>//g}" "$TFILE"
+sed -i.bak "/$lead/,/$tail/{s/<\/p>//g}" "$TFILE"
+
+# Convert file to markdown.
+MDFILE=${1%.*}.md
+cp "$TFILE" "$MDFILE.html"
+pandoc --from=html --to=json "$TFILE" | \
+  python -c "$HEADERS" | \
+  python -c "$IMAGES" "${1%.*}" | \
+  pandoc --standalone --from=json --to=markdown_github+yaml_metadata_block --output="$MDFILE"
+
+# Remove {.western}
+sed -i.bak 's/{.western[^}]*}//g' "$MDFILE"
+
+# Remove \
+sed -i.bak 's/^\\$//g' "$MDFILE"
+
+# Replace `...` to `---`
+sed -i.bak 's#^\.\.\.$#---#g' "$MDFILE"
+
+# Change keywords to tags.
+sed -i.bak -r "s#^keywords: '?(.*)'?#tags: [\1]#g" "$MDFILE"
+
+# Change ``` to ~~~
+sed -i.bak 's#```#~~~#g' "$MDFILE"
+
+# Remove temporary file
+rm "$TFILE"
+rm "$TFILE.bak"
+rm "$MDFILE.bak"
