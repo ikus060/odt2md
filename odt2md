@@ -71,7 +71,6 @@ sed -i.bak "/$lead/,/$tail/{s/<\/p>//g}" "$TFILE"
 
 # Convert file to markdown.
 MDFILE=${1%.*}.md
-cp "$TFILE" "$MDFILE.html"
 pandoc --from=html --to=json "$TFILE" | \
   python -c "$HEADERS" | \
   python -c "$IMAGES" "${1%.*}" | \
