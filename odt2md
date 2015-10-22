@@ -3,6 +3,19 @@
 
 #shopt -o -s xtrace
 
+PANDOC="pandoc"
+ODT2HTML="odt2html"
+
+# Function to diaply a warning to the user.
+function alertwarning(){
+  tty -s
+  if [ "0" == "$?" ]; then
+    echo "$1"
+  else
+    zenity --warning --text="$1"
+  fi
+}
+
 # Increase header level +1
 # Remove first heder. Set is as metadata.
 read -r -d '' HEADERS <<'EOF'
@@ -45,53 +58,63 @@ if __name__ == "__main__":
   toJSONFilter(images)
 EOF
 
-# Validate arguments
-if [ "$#" -ne 1 ]; then
-    # Open a dialog?!
-    echo "Illegal number of parameters"
-    exit 1
+# Check if pandoc is available
+if ! (command -v "$PANDOC" >/dev/null 2>&1); then
+  alertwarning "$PANDOC is missing!"
+  exit 2
 fi
 
-# Convert file to HTML
-TFILE="/tmp/$(basename $0).$$.html"
-odt2html --output="$TFILE" --format=html "$1"
+# Check if odt2html exists
+if ! (command -v "$ODT2HTML" >/dev/null 2>&1); then
+  alertwarning "$ODT2HTML is missing!"
+  exit 2
+fi
 
-# Fix <li> issues - remove <p> from <li>
-sed -i.bak 's#<li/>##g' "$TFILE"
-lead='^<ul>$'
-tail='^<\/ul>$'
-sed -i.bak "/$lead/,/$tail/{s/<p/<li/g}" "$TFILE"
-sed -i.bak "/$lead/,/$tail/{s/<\/p>/<\/li>/g}" "$TFILE"
+# Loop on every arguments
+for F in "$@"; do
 
-# Fix <table> issues - remove <p> from <li>
-lead='^<table'
-tail='^<\/table>$'
-sed -i.bak "/$lead/,/$tail/{s/<p[^>]*>//g}" "$TFILE"
-sed -i.bak "/$lead/,/$tail/{s/<\/p>//g}" "$TFILE"
+  # Convert file to HTML
+  TFILE="/tmp/$(basename $0).$$.html"
+  "$ODT2HTML" --output="$TFILE" --format=html "$F"
 
-# Convert file to markdown.
-MDFILE=${1%.*}.md
-pandoc --from=html --to=json "$TFILE" | \
-  python -c "$HEADERS" | \
-  python -c "$IMAGES" "${1%.*}" | \
-  pandoc --standalone --from=json --to=markdown_github+yaml_metadata_block --output="$MDFILE"
+  # Fix <li> issues - remove <p> from <li>
+  sed -i.bak 's#<li/>##g' "$TFILE"
+  lead='^<ul>$'
+  tail='^<\/ul>$'
+  sed -i.bak "/$lead/,/$tail/{s/<p/<li/g}" "$TFILE"
+  sed -i.bak "/$lead/,/$tail/{s/<\/p>/<\/li>/g}" "$TFILE"
 
-# Remove {.western}
-sed -i.bak 's/{.western[^}]*}//g' "$MDFILE"
+  # Fix <table> issues - remove <p> from <li>
+  lead='^<table'
+  tail='^<\/table>$'
+  sed -i.bak "/$lead/,/$tail/{s/<p[^>]*>//g}" "$TFILE"
+  sed -i.bak "/$lead/,/$tail/{s/<\/p>//g}" "$TFILE"
 
-# Remove \
-sed -i.bak 's/^\\$//g' "$MDFILE"
+  # Convert file to markdown.
+  MDFILE=${1%.*}.md
+  "$PANDOC" --from=html --to=json "$TFILE" | \
+    python -c "$HEADERS" | \
+    python -c "$IMAGES" "${1%.*}" | \
+    "$PANDOC" --standalone --from=json --to=markdown_github+yaml_metadata_block --output="$MDFILE"
 
-# Replace `...` to `---`
-sed -i.bak 's#^\.\.\.$#---#g' "$MDFILE"
+  # Remove {.western}
+  sed -i.bak 's/{.western[^}]*}//g' "$MDFILE"
 
-# Change keywords to tags.
-sed -i.bak -r "s#^keywords: '?(.*)'?#tags: [\1]#g" "$MDFILE"
+  # Remove \
+  sed -i.bak 's/^\\$//g' "$MDFILE"
 
-# Change ``` to ~~~
-sed -i.bak 's#```#~~~#g' "$MDFILE"
+  # Replace `...` to `---`
+  sed -i.bak 's#^\.\.\.$#---#g' "$MDFILE"
 
-# Remove temporary file
-rm "$TFILE"
-rm "$TFILE.bak"
-rm "$MDFILE.bak"
+  # Change keywords to tags.
+  sed -i.bak -r "s#^keywords: '?(.*)'?#tags: [\1]#g" "$MDFILE"
+
+  # Change ``` to ~~~
+  sed -i.bak 's#```#~~~#g' "$MDFILE"
+
+  # Remove temporary file
+  rm "$TFILE"
+  rm "$TFILE.bak"
+  rm "$MDFILE.bak"
+
+done
