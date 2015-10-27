@@ -1,6 +1,6 @@
 ---
 author: Patrik Dufresne
-changed: '2015-10-27T17:21:42.709091490'
+changed: '2015-10-27T18:14:02.061522301'
 changedby: Patrik Dufresne
 created: '2015-10-20T13:41:57.656627956'
 description: 'This is some comments !'
@@ -36,6 +36,26 @@ The following snippet of text is *rendered as italicized text*.
 
 An abbreviation of the word attribute is attr.
 
+### Emphasis classes
+
+Fusce dapibus, tellus ac cursus commodo, tortor mauris nibh.
+{: .text-muted}
+
+Nullam id dolor id nibh ultricies vehicula ut id elit.
+{: .text-primary}
+
+Etiam porta sem malesuada magna mollis euismod.
+{: .text-success}
+
+Donec ullamcorper nulla non metus auctor fringilla.
+{: .text-info}
+
+Duis mollis, est non commodo luctus, nisi erat porttitor ligula.
+{: .text-warning}
+
+Maecenas sed diam eget risus varius blandit sit amet non magna.
+{: .text-danger}
+
 Quotation
 ---------
 
@@ -44,16 +64,14 @@ Quotation
 Code
 ----
 
-~~~ western
-from pandocfilters import toJSONFilter
+    from pandocfilters import toJSONFilter
 
-def headers(key, value, format, meta):
-  if key == 'Header' and value[0]==1:
-      return []
+    def headers(key, value, format, meta):
+      if key == 'Header' and value[0]==1:
+          return []
 
-if __name__ == "__main__":
-  toJSONFilter(headers)
-~~~
+    if __name__ == "__main__":
+      toJSONFilter(headers)
 
 This is some inline code block: `key == 'header'`.
 
