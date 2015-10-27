@@ -81,6 +81,59 @@ if __name__ == "__main__":
   toJSONFilter(linebreaks)
 EOF
 
+# Style Div / Para
+read -r -d '' DIVSTYLES <<'EOF'
+from pandocfilters import toJSONFilter, Div, Str, LineBreak
+
+def divstyles(key, value, format, meta):
+  if key == 'Div' and len(value[0][1])>0:
+    # Create string similare to {: .text-muted }
+    style = '{: ' + ' '.join(['.' + x for x in value[0][1]]) + '}'
+    # Remove attributes from originals
+    value[0][1] = []
+    # Try to add our style string to div content.
+    if value[1][-1]['t'] == 'Plain':
+      value[1][-1]['c'].append(LineBreak())
+      value[1][-1]['c'].append(Str(style))
+    else:
+        value[1].append(Str(style))
+    return Div(*value)
+
+if __name__ == "__main__":
+  toJSONFilter(divstyles)
+EOF
+
+# Remove western from Header
+read -r -d '' WESTERNS <<'EOF'
+from pandocfilters import toJSONFilter, Header, Div, CodeBlock
+
+def filter_attrs(attrs):
+  """Remove western attributes. Also remove `-western` suffix."""
+  return [x.replace('-western', '')
+          for x in attrs
+          if x != 'western']
+
+def remove_westerns(key, value, format, meta):
+  # Header Int Attr [Inline]
+  if key == 'Header' and len(value[1][1]) > 0:
+    value[1][1] = filter_attrs(value[1][1])
+    return Header(*value)
+
+  # Div Attr [Block]
+  if key == 'Div' and len(value[0][1]) > 0:
+    value[0][1] = filter_attrs(value[0][1])
+    return Div(*value)
+
+  # CodeBlock Attr String
+  if key == 'CodeBlock' and len(value[0][1]) > 0:
+    value[0][1] = filter_attrs(value[0][1])
+    return CodeBlock(*value)
+
+if __name__ == "__main__":
+  toJSONFilter(remove_westerns)
+EOF
+
+
 # Check if pandoc is available
 if ! (command -v "$PANDOC" >/dev/null 2>&1); then
   alertwarning "$PANDOC is missing!"
@@ -116,16 +169,23 @@ for F in "$@"; do
   sed -i.bak "/$lead/,/$tail/{s/<\/p>/<br \/>/g}" "$TFILE"
   #sed -i.bak "/$lead/,/$tail/{s/<br \/>//g}" "$TFILE"
 
+  # Convert <p> to <div> to keep attributes
+  sed -i.bak "s/<p /<div /g" "$TFILE"
+  sed -i.bak "s/<p>/<div>/g" "$TFILE"
+  sed -i.bak "s/<\/p>/<\/div>/g" "$TFILE"
+
   # Convert file to markdown.
   MDFILE=${1%.*}.md
   "$PANDOC" --from=html --to=json "$TFILE" | \
+    python -c "$WESTERNS" | \
     python -c "$HEADERS" | \
     python -c "$LINEBREAKS" | \
+    python -c "$DIVSTYLES" | \
     python -c "$IMAGES" "${1%.*}" | \
     "$PANDOC" --standalone --from=json --to=markdown_github+yaml_metadata_block --output="$MDFILE"
 
   # Remove {.western}
-  sed -i.bak 's/{.western[^}]*}//g' "$MDFILE"
+  #sed -i.bak 's/{.western[^}]*}//g' "$MDFILE"
 
   # Replace `...` to `---`
   sed -i.bak 's#^\.\.\.$#---#g' "$MDFILE"
@@ -145,4 +205,5 @@ for F in "$@"; do
   rm "$MDFILE.bak"
 
 done
+
 
