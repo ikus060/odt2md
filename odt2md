@@ -17,13 +17,12 @@ function alertwarning(){
 }
 
 # Increase header level +1
-# Remove first heder. Set is as metadata.
 read -r -d '' HEADERS <<'EOF'
-from pandocfilters import toJSONFilter
+from pandocfilters import toJSONFilter, Header
 
 def headers(key, value, format, meta):
-  if key == 'Header' and value[0]==1:
-      return []
+  if key == 'Header':
+      return Header(value[0] + 1, value[1], value[2])
 
 if __name__ == "__main__":
   toJSONFilter(headers)
@@ -58,6 +57,30 @@ if __name__ == "__main__":
   toJSONFilter(images)
 EOF
 
+# Replace LineBreak from Table and BulletList by LBTOK
+read -r -d '' LINEBREAKS <<'EOF'
+from pandocfilters import walk, toJSONFilter, Str, Table, Plain, BulletList
+
+def replace_linebreaks(key, value, format, meta):
+  # Replace Line break by token
+  if key == 'LineBreak':
+    return Str('LBTOK')
+
+def replace_linebreaks_from(key, value, format, meta):
+  # Keep last line break.
+  if key == 'Plain':
+    return Plain(walk(value[:-1], replace_linebreaks, format, meta) + [value[-1]])
+
+def linebreaks(key, value, format, meta):
+  if key == 'Table':
+      return Table(value[0], value[1], value[2], value[3], walk(value[4], replace_linebreaks_from, format, meta))
+  if key == 'BulletList':
+    return BulletList(walk(value, replace_linebreaks, format, meta))
+
+if __name__ == "__main__":
+  toJSONFilter(linebreaks)
+EOF
+
 # Check if pandoc is available
 if ! (command -v "$PANDOC" >/dev/null 2>&1); then
   alertwarning "$PANDOC is missing!"
@@ -77,31 +100,32 @@ for F in "$@"; do
   TFILE="/tmp/$(basename $0).$$.html"
   "$ODT2HTML" --output="$TFILE" --format=html "$F"
 
-  # Fix <li> issues - remove <p> from <li>
-  sed -i.bak 's#<li/>##g' "$TFILE"
-  lead='^<ul>$'
-  tail='^<\/ul>$'
+  # Fix <li> issues
+  lead='^<[ou]l>$'
+  tail='^<\/[ou]l>$'
+  sed -i.bak "/$lead/,/$tail/{s#<li/>##g}" "$TFILE"
   sed -i.bak "/$lead/,/$tail/{s/<p/<li/g}" "$TFILE"
   sed -i.bak "/$lead/,/$tail/{s/<\/p>/<\/li>/g}" "$TFILE"
-
-  # Fix <table> issues - remove <p> from <li>
+  sed -i.bak "/$lead/,/$tail/{s/<br \/>//g}" "$TFILE"
+  
+  # Fix <table> issues - remove <p> from <table>
   lead='^<table'
   tail='^<\/table>$'
+  sed -i.bak "/$lead/,/$tail/{s/<p[^>]*><br\/>//g}" "$TFILE"
   sed -i.bak "/$lead/,/$tail/{s/<p[^>]*>//g}" "$TFILE"
-  sed -i.bak "/$lead/,/$tail/{s/<\/p>//g}" "$TFILE"
+  sed -i.bak "/$lead/,/$tail/{s/<\/p>/<br \/>/g}" "$TFILE"
+  #sed -i.bak "/$lead/,/$tail/{s/<br \/>//g}" "$TFILE"
 
   # Convert file to markdown.
   MDFILE=${1%.*}.md
   "$PANDOC" --from=html --to=json "$TFILE" | \
     python -c "$HEADERS" | \
+    python -c "$LINEBREAKS" | \
     python -c "$IMAGES" "${1%.*}" | \
     "$PANDOC" --standalone --from=json --to=markdown_github+yaml_metadata_block --output="$MDFILE"
 
   # Remove {.western}
   sed -i.bak 's/{.western[^}]*}//g' "$MDFILE"
-
-  # Remove \
-  sed -i.bak 's/^\\$//g' "$MDFILE"
 
   # Replace `...` to `---`
   sed -i.bak 's#^\.\.\.$#---#g' "$MDFILE"
@@ -112,9 +136,13 @@ for F in "$@"; do
   # Change ``` to ~~~
   sed -i.bak 's#```#~~~#g' "$MDFILE"
 
+  # Fix Table lineBreak
+  sed -i.bak -r 's#LBTOK#<br/>#g' "$MDFILE"
+
   # Remove temporary file
   rm "$TFILE"
   rm "$TFILE.bak"
   rm "$MDFILE.bak"
 
 done
+
