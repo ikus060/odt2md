@@ -32,8 +32,11 @@ EOF
 read -r -d '' IMAGES <<'EOF'
 import sys
 import base64
-from StringIO import StringIO
 from pandocfilters import toJSONFilter, Image
+try:
+   from StringIO import StringIO
+except ImportError:
+   from io import StringIO
 
 count=1
 basename=sys.argv[1]
