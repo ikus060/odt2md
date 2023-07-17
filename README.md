@@ -9,9 +9,9 @@
 
 ## Features
 
-* Fixes list item formatting by removing unnecessary <p> tags from <li> elements.
-* Fixes table formatting by removing unnecessary <p> tags from table cells.
-* Removes various obsolete styles (e.g., {.western}).
+* Fixes list item formatting by removing unnecessary `<p>` tags from `<li>` elements.
+* Fixes table formatting by removing unnecessary `<p>` tags from table cells.
+* Removes various obsolete styles (e.g., `{.western}`).
 * Exports embedded images along with the converted Markdown file.
 
 ## Installation
