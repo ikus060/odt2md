@@ -1,0 +1,12 @@
+stages:
+  - test
+
+test:
+  stage: test
+  image: python:3-bullseye
+  before_script:
+    - apt update
+    - apt install -y --no-install-recommends pandoc python3-pandocfilters unoconv zenity
+  script:
+    - chmod +x ./odt2md
+    - ./odt2md examples/test.odt
